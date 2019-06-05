@@ -29,6 +29,7 @@ def get_frames(input_video, input_avi, output_avi, fps, start_sec, end_sec):
 
 
 def convert_to_mp4(output_avi, output_video, output_width, fps):
+    print("Converting file back to mp4")
     # Convert avi to mp4. If you want a different format try changing the output variable's file extension
     # and commenting out the line that starts with -crf. If that doesn't work you'll be making friends with ffmpeg's many, many options.
     # It's normal for ffmpeg to complain a lot about malformed headers if it processes the end of a datamoshed avi.
