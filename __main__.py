@@ -52,14 +52,14 @@ except OSError:
     print("ffmpeg was not found. Please install it. Thanks.")
     sys.exit()
 
-mosher = Mosher(input_video, 10)
+mosher = Mosher(input_video, 15)
 
-profiles = [MoshProfile(0, 5, 60), MoshProfile(2, 3, 3), MoshProfile(5, 5, 2)]
+profiles = [MoshProfile(0, 5, 10), MoshProfile(2, 3, 10), MoshProfile(5, 10, 10), MoshProfile(8, 7, 50)]
 
 # mosher.get_first_frames()
 # mosher.mutate_to_deltaframes()
-mosher.remove_keyframes()
-mosher.reset_frames()
+# mosher.remove_keyframes()
+# mosher.reset_frames()
 mosher.mosh(profiles)
 
 mosher.finish()
