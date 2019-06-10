@@ -1,6 +1,7 @@
-import utils
 import os
-from utils import get_frames, convert_to_mp4, iframe, pframe
+
+from utils import get_frames, convert_to_mp4, iframe, pframe, convert_to_avi, abs_out, output_dir, get_resolution, \
+    get_img_frame
 
 
 class Mosher():
@@ -12,7 +13,8 @@ class Mosher():
         self.start_sec = 0
         self.end_sec = end_sec
 
-        output_dir = 'moshed_videos'
+        if not os.path.exists(abs_out):
+            os.makedirs(abs_out)
 
         file_name = os.path.splitext(os.path.basename(self.input_video))[0]
         self.output_video = os.path.join(output_dir,
@@ -24,9 +26,19 @@ class Mosher():
                                       'datamoshing_input.avi')  # must be an AVI so i-frames can be located in binary file
         self.output_avi = os.path.join(output_dir, 'datamoshing_output.avi')
 
-        self.in_file, self.out_file, self.frames = get_frames(self.input_video, self.input_avi, self.output_avi,
-                                                              self.fps,
-                                                              self.start_sec, self.end_sec)
+        # Initialize empty list of frames
+        self.frames = []
+
+    def get_frames(self):
+        # Convert the input video to AVI, and get a list of all the frames
+        convert_to_avi(self.input_video, self.input_avi,
+                       self.fps,
+                       self.start_sec, self.end_sec)
+        self.in_file, self.out_file, self.frames = get_frames(self.input_avi, self.output_avi)
+
+    def get_resolutions(self):
+        self.width, self.height = get_resolution(self.input_avi)
+        print('Found resolution: {} x {}'.format(self.width, self.height))
 
     def remove_keyframes(self):
         key_frame = None
@@ -35,10 +47,16 @@ class Mosher():
             if not key_frame:
                 self.write_frame(frame)
 
-                if frame[5:8] == iframe:
+                if frame.is_key_frame():
                     key_frame = frame
 
-            elif frame[5:8] != iframe:
+            elif not frame.is_key_frame():
+                self.write_frame(frame)
+
+    def remove_deltaframes(self):
+
+        for index, frame in enumerate(self.frames):
+            if not frame.is_delta_frame():
                 self.write_frame(frame)
 
     def mosh(self, profiles):
@@ -47,85 +65,66 @@ class Mosher():
 
         # We want at least one i-frame before the glitching starts
         i_frame_yet = False
+        moshing = False
 
         for index, frame in enumerate(self.frames):
 
+            # Find an i-frame before going on with moshing
             if not i_frame_yet:
                 # the split above removed the end of frame signal so we put it back in
                 self.write_frame(frame)
 
                 # found an i-frame, let the glitching begin
-                if frame[5:8] == iframe:
+                if frame.is_key_frame():
                     i_frame_yet = True
 
-            elif not any([p.should_mosh(index, self.fps) for p in profiles]):
+            elif not any([p.should_mosh(index, self.fps, frame) for p in profiles]):
                 self.write_frame(frame)
 
-            elif frame[5:8] != iframe:
-                # else:
+            elif not frame.is_key_frame():
                 # while we're moshing we're repeating p-frames and multiplying i-frames
                 for profile in profiles:
-                    if profile.should_mosh(index, self.fps):
+                    if profile.should_mosh(index, self.fps, frame):
                         # this repeats the p-frame x times
+                        if profile.should_mask():
+                            self.write_frame(get_img_frame(profile.mask_img, self.width, self.height))
+                            profile.masked = True
                         for i in range(profile.repeating):
-                            self.out_file.write(frame)
+                            f = self.frames[index]
+                            if f.is_delta_frame():
+                                # self.out_file.write(f.data)
+                                self.write_frame(f)
 
-                        self.out_file.write(bytes.fromhex('30306463'))
+                        # self.out_file.write(bytes.fromhex('30306463'))
 
-    def get_first_frames(self):
-        length = 5
-        for index in range(length):
-            frame = self.frames[index]
-            print(frame)
-            header = frame[5:8]
-            print(header, 'iframe: ', header == iframe, 'pframe: ', header == pframe)
-            a = bytearray(frame)
-            print('OG', a[5:8])
-            a[5:8] = [b for b in pframe]
-            print('MOD', a[5:8])
-            convert = bytes(a)
-            print(convert == frame)
-
-    def mutate_to_deltaframes(self):
-        first_key_frame = None
-
-        for index, frame in enumerate(self.frames):
-            if not first_key_frame:
-                self.write_frame(frame)
-
-                if frame[5:8] == iframe:
-                    first_key_frame = frame
-
-            elif frame[5:8] == iframe:
-                a = bytearray(frame)
-                a[5:8] = [b for b in pframe]
-                self.write_frame(bytes(a))
+    def analyze(self):
+        headers = []
+        iframes = []
+        pframes = []
+        for f in self.frames:
+            header = f.header
+            if not header in headers:
+                headers.append(header)
+            if header == iframe:
+                iframes.append(f)
+            elif header == pframe:
+                pframes.append(f)
+        print('Total frames: ', len(self.frames))
+        print('KeyFrames: {0:d}, {1:.2f}%'.format(len(iframes), (len(iframes) / len(self.frames) * 100.0)))
+        print('DeltaFrames: {0:d}, {1:.2f}%'.format(len(pframes), (len(pframes) / len(self.frames) * 100.0)))
+        for h in headers:
+            print(h, ' : ', h.hex())
 
     def write_frame(self, frame):
-        self.out_file.write(frame + bytes.fromhex('30306463'))
+        self.out_file.write(frame.data + bytes.fromhex('30306463'))
 
     def reset_frames(self):
         self.frames = open(self.output_avi, 'rb').read().split(bytes.fromhex('30306463'))
         self.out_file = open(self.output_avi, 'wb')
 
     def finish(self):
-        convert_to_mp4(self.output_avi, self.output_video, self.output_width, self.fps)
+        convert_to_mp4(self.output_avi, self.output_video, self.output_width, self.fps, self.start_sec, self.end_sec)
         # gets rid of the in-between files so they're not crudding up your system
-        os.remove(self.input_avi)
-        os.remove(self.output_avi)
+        # os.remove(self.input_avi)
+        # os.remove(self.output_avi)
         print('Mosh Complete: ', self.output_video)
-
-
-class MoshProfile():
-
-    def __init__(self, start_sec, duration, repeating):
-        self.start_sec = start_sec
-        self.end_sec = start_sec + duration
-        self.repeating = repeating
-
-    def info(self):
-        print('mosh effect applied at: ', str(self.start_sec))
-        print('mosh effect stops being applied at: ', str(self.end_sec))
-
-    def should_mosh(self, frame_index, fps):
-        return int(self.start_sec * fps) <= frame_index <= int(self.end_sec * fps)

@@ -3,9 +3,11 @@ import os
 import sys
 import subprocess
 
-from mosh import MoshProfile, Mosher
+import utils
+from mosh import Mosher
+from mosh_profile import MoshProfile
 
-input_video = "1.webm"
+input_video = "nm1.webm"
 fps = 25
 output_width = 720
 start_sec = 0
@@ -52,14 +54,19 @@ except OSError:
     print("ffmpeg was not found. Please install it. Thanks.")
     sys.exit()
 
-mosher = Mosher(input_video, 15)
+mosher = Mosher(input_video, 22)
+# Refrain from converting to avi on same vid...
+mosher.in_file, mosher.out_file, mosher.frames = utils.get_frames(mosher.input_avi, mosher.output_avi)
+mosher.get_resolutions()
 
-profiles = [MoshProfile(0, 5, 10), MoshProfile(2, 3, 10), MoshProfile(5, 10, 10), MoshProfile(8, 7, 50)]
+profiles = [MoshProfile(1, 5, 50, "1.jpg"), ]  # MoshProfile(2, 3, 10), MoshProfile(5, 10, 10), MoshProfile(8, 7, 50)]
 
 # mosher.get_first_frames()
 # mosher.mutate_to_deltaframes()
+# mosher.remove_deltaframes()
 # mosher.remove_keyframes()
 # mosher.reset_frames()
 mosher.mosh(profiles)
 
 mosher.finish()
+# mosher.analyze()
