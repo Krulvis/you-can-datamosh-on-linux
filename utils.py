@@ -16,8 +16,10 @@ from frame import Frame
 
 
 def get_resolution(input_video):
-    p = Popen(['ffprobe', '-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x', input_video],
-              stdin=PIPE, stdout=PIPE, stderr=PIPE)
+    p = Popen(
+        ['ffprobe', '-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x',
+         input_video],
+        stdin=PIPE, stdout=PIPE, stderr=PIPE)
     output, err = p.communicate()
     width, height = output.decode("utf-8").split('x')
     width = re.sub("[^0-9]", "", width)
@@ -29,7 +31,7 @@ def get_resolution(input_video):
 def convert_to_avi(input_video, target_avi, fps, start_sec, end_sec):
     print("Converting input file!")
     subprocess.call('ffmpeg -loglevel error -y -i ' + input_video + ' ' +
-                    ' -crf 0 -pix_fmt yuv420p -r ' + str(fps) + ' ' + ' -b 5000k '
+                    ' -crf 0 -pix_fmt yuv420p -r ' + str(fps) + ' ' + ' -b 5000k keyint=9999999'
                                                                       ' -ss ' + str(start_sec) + ' -to ' + str(
         end_sec) + ' ' +
                     target_avi, shell=True)

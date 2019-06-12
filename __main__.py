@@ -59,7 +59,7 @@ mosher = Mosher(input_video, 22)
 mosher.in_file, mosher.out_file, mosher.frames = utils.get_frames(mosher.input_avi, mosher.output_avi)
 mosher.get_resolutions()
 
-profiles = [MoshProfile(1, 5, 50, "1.jpg"), ]  # MoshProfile(2, 3, 10), MoshProfile(5, 10, 10), MoshProfile(8, 7, 50)]
+profiles = [MoshProfile(1, 5, 3, "1.jpg"), ]  # MoshProfile(2, 3, 10), MoshProfile(5, 10, 10), MoshProfile(8, 7, 50)]
 
 # mosher.get_first_frames()
 # mosher.mutate_to_deltaframes()

@@ -59,6 +59,36 @@ class Mosher():
             if not frame.is_delta_frame():
                 self.write_frame(frame)
 
+    def mask(self, profiles):
+        i_frame_yet = False
+        moshing = False
+
+        for index, frame in enumerate(self.frames):
+            # Find an i-frame before going on with moshing
+            if not i_frame_yet:
+                # the split above removed the end of frame signal so we put it back in
+                self.write_frame(frame)
+
+                # found an i-frame, let the glitching begin
+                if frame.is_key_frame():
+                    i_frame_yet = True
+
+            elif not any([p.should_mosh(index, self.fps, frame) for p in profiles]):
+                self.write_frame(frame)
+
+            elif not frame.is_key_frame():
+                # while we're moshing we're repeating p-frames and multiplying i-frames
+                for profile in profiles:
+                    if profile.should_mosh(index, self.fps, frame):
+                        # this repeats the p-frame x times
+                        if profile.should_mask():
+                            self.write_frame(get_img_frame(profile.mask_img, self.width, self.height))
+                            profile.masked = True
+                        elif frame.is_delta_frame():
+                            self.write_frame(frame)
+
+                        # self.out_file.write(bytes.fromhex('30306463'))
+
     def mosh(self, profiles):
         for p in profiles:
             p.info()
@@ -86,15 +116,11 @@ class Mosher():
                 for profile in profiles:
                     if profile.should_mosh(index, self.fps, frame):
                         # this repeats the p-frame x times
-                        if profile.should_mask():
-                            self.write_frame(get_img_frame(profile.mask_img, self.width, self.height))
-                            profile.masked = True
                         for i in range(profile.repeating):
                             f = self.frames[index]
                             if f.is_delta_frame():
                                 # self.out_file.write(f.data)
                                 self.write_frame(f)
-
                         # self.out_file.write(bytes.fromhex('30306463'))
 
     def analyze(self):
