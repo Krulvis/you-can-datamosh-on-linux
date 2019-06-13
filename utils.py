@@ -4,7 +4,7 @@
 import os
 import re
 import subprocess
-from subprocess import Popen, PIPE
+import ffmpeg
 
 iframe = bytes.fromhex('0001B0')
 pframe = bytes.fromhex('0001B6')
@@ -12,43 +12,54 @@ output_dir = 'moshed_videos'
 abs_out = os.path.abspath(output_dir)
 
 # 0x0001B0 signals the beginning of an i-frame. Additional info: 0x0001B6 signals a p-frame
-from frame import Frame
 
 
-def get_resolution(input_video):
-    p = Popen(
-        ['ffprobe', '-v', 'error', '-show_entries', 'stream=width,height', '-of', 'csv=p=0:s=x',
-         input_video],
-        stdin=PIPE, stdout=PIPE, stderr=PIPE)
-    output, err = p.communicate()
-    width, height = output.decode("utf-8").split('x')
-    width = re.sub("[^0-9]", "", width)
-    height = re.sub("[^0-9]", "", height)
+
+def get_resolution(filename):
+    print('Getting video size for {!r}'.format(filename))
+    probe = ffmpeg.probe(filename)
+    video_info = next(s for s in probe['streams'] if s['codec_type'] == 'video')
+    width = int(video_info['width'])
+    height = int(video_info['height'])
     print(width, height)
-    return int(width), int(height)
+    return width, height
 
 
 def convert_to_avi(input_video, target_avi, fps, start_sec, end_sec):
     print("Converting input file!")
-    subprocess.call('ffmpeg -loglevel error -y -i ' + input_video + ' ' +
-                    ' -crf 0 -pix_fmt yuv420p -r ' + str(fps) + ' ' + ' -b 5000k keyint=9999999'
-                                                                      ' -ss ' + str(start_sec) + ' -to ' + str(
-        end_sec) + ' ' +
-                    target_avi, shell=True)
+    process1 = (
+        ffmpeg
+            .input(input_video)
+            .output(target_avi, r=fps, b='5000k', g=fps * (end_sec - start_sec), pix_fmt='yuv420p', keyint_min=999999,
+                    ss=start_sec, to=end_sec)
+            .run(overwrite_output=True)
+    )
+    # subprocess.call('ffmpeg -loglevel error -y -i ' + input_video + ' ' +
+    #                 ' -crf 0 -pix_fmt yuv420p -r ' + str(fps) + ' ' + ' -b 5000k -x264-params keyint=99999999:min-keyint=99999999'
+    #                                                                   ' -ss ' + str(start_sec) + ' -to ' + str(
+    #     end_sec) + ' ' +
+    #                 target_avi, shell=True)
     print("Converting input done!")
 
 
 def get_img_frame(img, width, height):
     file_name = os.path.splitext(os.path.basename(img))[0]
 
-    output = os.path.join(output_dir,
-                          'png_{}.avi'.format(file_name))  # must be an AVI so i-frames can be located in binary file
+    output = os.path.abspath(os.path.join(output_dir,
+                                          'png_{}.avi'.format(
+                                              file_name)))  # must be an AVI so i-frames can be located in binary file
 
-    subprocess.call('ffmpeg -loglevel error -y -i ' + img + ' ' +
-                    ' -crf 0 -pix_fmt yuv420p -r ' + str(1) + ' ' + ' -b 5000k ' +
-                    '-s {}x{}'.format(width, height) +
-                    output, shell=True)
-
+    # subprocess.call('ffmpeg -loglevel error -y -i ' + img + ' ' +
+    #                 ' -crf 0 -pix_fmt yuv420p -r ' + str(25) + ' ' + ' -b 5000k ' +
+    #                 '-s {}x{}'.format(width, height) +
+    #                 output, shell=True)
+    out, err = (
+        ffmpeg
+            .input(img)
+            .filter('select', 'gte(n,{})'.format(0))
+            .output(output, vframes=1)
+            .run(capture_stdout=True, overwrite_output=True)
+    )
     in_file = open(output, 'rb')
     frames = [Frame(d) for d in in_file.read().split(bytes.fromhex('30306463'))]
     return [f for f in frames if f.is_key_frame()][0]
@@ -82,3 +93,16 @@ def convert_to_mp4(output_avi, output_video, output_width, fps, start_sec, end_s
                     ' -max_muxing_queue_size 1024 ' +
                     # ' -ss ' + str(start_sec) + ' -to ' + str(end_sec) + ' ' +
                     output_video, shell=True)
+
+
+class Frame():
+
+    def __init__(self, data):
+        self.header = data[5:8]
+        self.data = data
+
+    def is_key_frame(self):
+        return self.header == iframe
+
+    def is_delta_frame(self):
+        return self.header == pframe

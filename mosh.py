@@ -34,6 +34,7 @@ class Mosher():
         convert_to_avi(self.input_video, self.input_avi,
                        self.fps,
                        self.start_sec, self.end_sec)
+
         self.in_file, self.out_file, self.frames = get_frames(self.input_avi, self.output_avi)
 
     def get_resolutions(self):
@@ -62,6 +63,7 @@ class Mosher():
     def mask(self, profiles):
         i_frame_yet = False
         moshing = False
+        width, height = get_resolution(self.input_avi)
 
         for index, frame in enumerate(self.frames):
             # Find an i-frame before going on with moshing
@@ -82,7 +84,7 @@ class Mosher():
                     if profile.should_mosh(index, self.fps, frame):
                         # this repeats the p-frame x times
                         if profile.should_mask():
-                            self.write_frame(get_img_frame(profile.mask_img, self.width, self.height))
+                            self.write_frame(get_img_frame(profile.mask_img, width, height))
                             profile.masked = True
                         elif frame.is_delta_frame():
                             self.write_frame(frame)
@@ -123,7 +125,7 @@ class Mosher():
                                 self.write_frame(f)
                         # self.out_file.write(bytes.fromhex('30306463'))
 
-    def analyze(self):
+    def analyze(self, print_headers=False):
         headers = []
         iframes = []
         pframes = []
@@ -138,8 +140,9 @@ class Mosher():
         print('Total frames: ', len(self.frames))
         print('KeyFrames: {0:d}, {1:.2f}%'.format(len(iframes), (len(iframes) / len(self.frames) * 100.0)))
         print('DeltaFrames: {0:d}, {1:.2f}%'.format(len(pframes), (len(pframes) / len(self.frames) * 100.0)))
-        for h in headers:
-            print(h, ' : ', h.hex())
+        if print_headers:
+            for h in headers:
+                print(h, ' : ', h.hex())
 
     def write_frame(self, frame):
         self.out_file.write(frame.data + bytes.fromhex('30306463'))
