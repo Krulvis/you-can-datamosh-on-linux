@@ -126,7 +126,7 @@ def run(in_filename, out_filename, process_frame, blend=0.5):
 
         print('Processing frame: ', frame_index)
         out_frame = process_frame(in_frame)
-        if blend > 0:
+        if blend > 0 and last_frame is not None:
             out_frame = morphPicture(last_frame, out_frame, blend, width)
             last_frame = out_frame
 
