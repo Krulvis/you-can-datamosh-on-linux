@@ -46,6 +46,8 @@ pic1, err1 = (
         .trim(start_frame=0, end_frame=1)
         .output('pipe:', format='avi', pix_fmt='yuv420p', s='{}x{}'.format(width, height))
         .run(capture_stdout=True)
+
+
 )
 png_frame = pic1.split(bytes.fromhex('30306463'))[1]
 
