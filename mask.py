@@ -2,7 +2,7 @@ import os
 import ffmpeg
 from utils import output_dir, get_resolution, Frame, convert_to_mp4
 
-input_video = os.path.abspath('3.webm')
+input_video = os.path.abspath('fucked_up_chillings.mp4')
 input_png = os.path.abspath('grid.jpg')
 file_name = os.path.splitext(os.path.basename(input_video))[0]
 temp_video = os.path.join(output_dir, 'temp_mosh_{}.avi'.format(
@@ -10,7 +10,7 @@ temp_video = os.path.join(output_dir, 'temp_mosh_{}.avi'.format(
 output_mosh = os.path.join(output_dir, 'test_mosh_{}.avi'.format(
     file_name))  # this ensures we won't over-write your original video
 output_video = os.path.join(output_dir, 'test_mosh_{}.mp4'.format(
-    file_name))  # this ensures we won't over-write your original video
+    file_name))  # this ensures we won't over-write your original video`-
 width, height = get_resolution(input_video)
 
 fps = 25
@@ -20,7 +20,7 @@ end_sec = 20
 process1 = (
     ffmpeg
         .input(input_video)
-        .output(temp_video, r=fps, b='5000k', g=fps * (end_sec - start_sec), pix_fmt='yuv420p',
+        .output(temp_video, r=fps, b='500000k', g=fps * (end_sec - start_sec), pix_fmt='yuv420p',
                 keyint_min=999999,
                 ss=start_sec, to=end_sec)
         .run(overwrite_output=True)
@@ -46,7 +46,6 @@ pic1, err1 = (
         .trim(start_frame=0, end_frame=1)
         .output('pipe:', format='avi', pix_fmt='yuv420p', s='{}x{}'.format(width, height))
         .run(capture_stdout=True)
-
 
 )
 png_frame = pic1.split(bytes.fromhex('30306463'))[1]

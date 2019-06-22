@@ -11,8 +11,8 @@ pframe = bytes.fromhex('0001B6')
 output_dir = 'moshed_videos'
 abs_out = os.path.abspath(output_dir)
 
-# 0x0001B0 signals the beginning of an i-frame. Additional info: 0x0001B6 signals a p-frame
 
+# 0x0001B0 signals the beginning of an i-frame. Additional info: 0x0001B6 signals a p-frame
 
 
 def get_resolution(filename):
@@ -30,7 +30,7 @@ def convert_to_avi(input_video, target_avi, fps, start_sec, end_sec):
     process1 = (
         ffmpeg
             .input(input_video)
-            .output(target_avi, r=fps, b='5000k', g=fps * (end_sec - start_sec), pix_fmt='yuv420p', keyint_min=999999,
+            .output(target_avi, r=fps, b='30000k', g=fps * (end_sec - start_sec), pix_fmt='yuv420p', keyint_min=999999,
                     ss=start_sec, to=end_sec)
             .run(overwrite_output=True)
     )

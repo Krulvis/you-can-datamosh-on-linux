@@ -19,6 +19,8 @@ is installed before running)
 '''
 from __future__ import print_function
 import argparse
+
+import PIL.Image
 import ffmpeg
 import logging
 import numpy as np
@@ -94,19 +96,42 @@ def write_frame(process2, frame):
     )
 
 
-def run(in_filename, out_filename, process_frame):
+def resizePicture(image, width):
+    img = PIL.Image.open(image)
+    basewidth = width
+    wpercent = (basewidth / float(img.size[0]))
+    hsize = int((float(img.size[1]) * float(wpercent)))
+    return img.resize((basewidth, hsize), PIL.Image.ANTIALIAS)
+
+
+def morphPicture(filename1, filename2, blend, width):
+    img1 = PIL.Image.open(filename1)
+    img2 = PIL.Image.open(filename2)
+    if width is not 0:
+        img2 = resizePicture(filename2, width)
+    return PIL.Image.blend(img1, img2, blend)
+
+
+def run(in_filename, out_filename, process_frame, blend=0.5):
     width, height = get_resolution(in_filename)
     process1 = start_ffmpeg_process1(in_filename)
     process2 = start_ffmpeg_process2(out_filename, width, height)
+    frame_index = 0
+    last_frame = None
     while True:
         in_frame = read_frame(process1, width, height)
         if in_frame is None:
             logger.info('End of input stream')
             break
 
-        logger.debug('Processing frame')
+        print('Processing frame: ', frame_index)
         out_frame = process_frame(in_frame)
+        if blend > 0:
+            out_frame = morphPicture(last_frame, out_frame, blend, width)
+            last_frame = out_frame
+
         write_frame(process2, out_frame)
+        frame_index += 1
 
     logger.info('Waiting for ffmpeg process1')
     process1.wait()
@@ -201,7 +226,7 @@ class DeepDream(object):
                 grad[y:y + sz, x:x + sz] = g
         return np.roll(np.roll(grad, -sx, 1), -sy, 0)
 
-    def process_frame(self, frame, iter_n=10, step=1.5, octave_n=4, octave_scale=1.4):
+    def process_frame(self, frame, iter_n=5, step=1.5, octave_n=4, octave_scale=1.4):
         t_score = tf.reduce_mean(self.t_obj)  # defining the optimization objective
         t_grad = tf.gradients(t_score, self._t_input)[0]  # behold the power of automatic differentiation!
 
