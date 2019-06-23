@@ -77,6 +77,7 @@ def get_tile_size(num_pixels, tile_size=400):
 class Dream():
 
     def __init__(self, layer):
+        import tensorflow as tf
         self.model = inception5h.Inception5h()
         self.session = tf.InteractiveSession(graph=self.model.graph)
         self.layer_tensor = self.model.layer_tensors[layer]
@@ -283,7 +284,6 @@ class Dream():
 
 
 if __name__ == '__main__':
-    import tensorflow as tf
 
     inception5h.maybe_download()
 
