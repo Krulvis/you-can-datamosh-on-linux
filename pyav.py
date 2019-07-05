@@ -1,79 +1,114 @@
-import PIL
+import numpy as np
 import av
 from av.video.stream import VideoStream
-import numpy as np
-from IPython.display import Image, display
+from utils import convert_to_avi
+from dream import *
+import inception5h
 
-from dream import Dream
+inception5h.maybe_download()
+model = inception5h.Inception5h()
+layer_tensor = model.layer_tensors[6]
 
+# Load deep dreaming lib
+dream = Dream(layer=6)
 
-def plot_image(image):
-    # Assume the pixel-values are scaled between 0 and 255.
+### Some base functions
+def transform_img(img, iterations=1, repeats=1):
+#     img_result = img * 0.3
+    img_result = dream.recursive_optimize(image=img,
+                                          num_iterations=iterations,
+                                          num_repeats=repeats,
+                                          step_size=3.0,
+                                          rescale_factor=0.7,
+                                          blend=0.5)
+    result = np.clip(img_result, 0.0, 255.0).astype(np.uint8)
+    return result
 
-    # Ensure the pixel-values are between 0 and 255.
-    image = np.clip(image, 0.0, 255.0)
+def get_writer(file, width, height, fps):
+    container = av.open(file, 'w')
+    stream = container.add_stream('mpeg4', rate=fps)
+    stream.width = width
+    stream.height = height
+    stream.pix_fmt = 'yuv420p'
+    return container, stream
 
-    # Convert pixels to bytes.
-    image = image.astype(np.uint8)
+def get_reader(file):
+    return av.open(file, 'r')
 
-    # Convert to a PIL-image and display it.
-    display(PIL.Image.fromarray(image))
+def write_frame(container, stream, frame):
+    for packet in stream.encode(frame):
+        container.mux(packet)
+
+### First input video
+input_video = 'sea.mp4'
+
+# Get information
+probe = ffmpeg.probe(input_video)
+video_info = next(s for s in probe['streams'] if s['codec_type'] == 'video')
+width = int(video_info['width'])
+height = int(video_info['height'])
+fps = round(eval(video_info['avg_frame_rate']))
+print(f'Fps: {fps}, Width: {width}, Height: {height}')
+
+### Convert video to 1 key-frame avi
+no_key_video = 'no_key_frames.avi'
+convert_to_avi(input_video, no_key_video, fps, 0, 5)
 
 
 ## Input video
-input_container = av.open('no_key_frames.avi', 'r')
+container = get_reader(no_key_video)
 
 ## Ouput video
-output_container = av.open('moshed_videos/output_packets.mp4', 'w')
-stream = output_container.add_stream('mpeg4', rate=30)
-stream.width = 720
-stream.height = 1280
-stream.pix_fmt = 'yuv420p'
+output_container, output_stream = get_writer('moshed_videos/pyav_output.mp4', width, height, fps)
 
-## Temp file
 temp_file = 'moshed_videos/temp_packets.mp4'
-temp_container = av.open(temp_file, 'w')
-strm = temp_container.add_stream('mpeg4', rate=30)
-strm.width = 720
-strm.height = 1280
-strm.pix_fmt = 'yuv420p'
 
-for packet in input_container.demux():
+temp_output_container, tmp_strm = get_writer(temp_file, width, height, fps)
+
+f_index = 0
+for packet in container.demux():
     if packet.stream.type == 'video':
+        ## I am converting every video to have only 1 key-frame
         if packet.is_keyframe:
             ## Extract full frame and deep dream
-            print(packet, packet.is_keyframe)
             for frame in packet.decode():
                 print(frame)
                 img = np.asarray(frame.to_image())
-                plot_image(img)
-                print(img.shape)
-
-                img_result = img * 0.3
-                # img_result = dream.recursive_optimize(image=img,
-                #                                       num_iterations=1, step_size=3.0, rescale_factor=0.7,
-                #                                       num_repeats=1, blend=0.5)
-                result = np.clip(img_result, 0.0, 255.0)
-                # Convert pixels to bytes.
-                result = result.astype(np.uint8)
-
-                print(result.shape)
-                plot_image(result)
+                result = transform_img(img, iterations=10, repeats=4)
                 new_frame = av.VideoFrame.from_ndarray(result, format='rgb24')
                 ## Add frame to streams
-                for packet in stream.encode(new_frame):
-                    output_container.mux(packet)
-                for packet in strm.encode(new_frame):
-                    temp_container.mux(packet)
-        else:
-            ## Put frame into temp stream
-            temp_container.mux_one(packet)
-            tmp_reader = av.open('')
-            for i, p in enumerate(temp_container.demux()):
-                for frame in p.decode():
-                    print('P-Frame', frame)
-                    img = np.asarray(frame.to_image())
-                    plot_image(img)
+                write_frame(output_container, output_stream, new_frame)
+                write_frame(temp_output_container, tmp_strm, new_frame)
 
-            break
+        # Every frame other than the first is not a key-frame
+        else:
+            ## Put p-frame into temp stream
+            temp_output_container.mux_one(packet)
+            temp_output_container.close()
+
+            # Now read full frame from temp
+            temp_input_container = av.open(temp_file, 'r')
+
+            last_frame = None
+            for packet in temp_input_container.demux():
+                if packet.stream.type == 'video':
+                    for frame in packet.decode():
+                        print(frame)
+                        last_frame = frame
+            img = np.asarray(frame.to_image())
+            print(img.shape)
+
+            # Get transformed img
+            result = transform_img(img, iterations=10)
+
+            new_frame = av.VideoFrame.from_ndarray(result, format='rgb24')
+
+            # Reopen output
+            temp_output_container, tmp_strm = get_writer(temp_file, width, height, fps)
+            ## Add frame to streams
+            write_frame(output_container, output_stream, new_frame)
+            write_frame(temp_output_container, tmp_strm, new_frame)
+
+    print('Did frame:', f_index)
+    f_index += 1
 output_container.close()
